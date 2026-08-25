@@ -1,0 +1,323 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String               @id @default(uuid())
+  email         String               @unique
+  passwordHash  String
+  displayName   String
+  role          String               @default("CITIZEN") // CITIZEN, INVESTIGATOR, ADMIN
+  isActive      Boolean              @default(true)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  privacySettings      UserPrivacySettings?
+  reports              Report[]
+  supports             ReportSupport[]
+  verificationReviews  VerificationReview[]
+  outcomeUpdates       OutcomeUpdate[]
+  notifications        Notification[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model UserPrivacySettings {
+  id                       String   @id @default(uuid())
+  userId                   String   @unique
+  displayPublicly          Boolean  @default(false)
+  allowInvestigatorContact Boolean  @default(true)
+  anonymizeReports         Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Report {
+  id               String   @id @default(uuid())
+  trackingId       String   @unique // e.g. NAG-2026-1001
+  userId           String
+  title            String
+  category         String   // WATER_SANITATION, HEALTHCARE, ROADS_INFRASTRUCTURE, PUBLIC_TRANSPORT, EDUCATION, ENVIRONMENT, CIVIC_SERVICES
+  description      String
+  locationState    String
+  locationDistrict String
+  locationGeneral  String
+  incidentDate     DateTime?
+  status           String   @default("SUBMITTED") // SUBMITTED, PRELIMINARY_ANALYSIS, AGGREGATING, LINKED_TO_SYSTEMIC, RESOLVED, REJECTED
+  aiProcessed      Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user             User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  evidence         ReportEvidence[]
+  supports         ReportSupport[]
+  systemicLinks    ReportSystemicIssueLink[]
+
+  @@index([trackingId])
+  @@index([userId])
+  @@index([category])
+  @@index([locationState, locationDistrict])
+  @@index([status])
+}
+
+model ReportEvidence {
+  id          String   @id @default(uuid())
+  reportId    String
+  fileName    String
+  filePath    String
+  fileType    String
+  fileSize    Int
+  description String?
+  isPrivate   Boolean  @default(true)
+  uploadedAt  DateTime @default(now())
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
+
+model ReportSupport {
+  id        String   @id @default(uuid())
+  reportId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, userId])
+  @@index([reportId])
+  @@index([userId])
+}
+
+model SystemicIssue {
+  id                  String   @id @default(uuid())
+  trackingId          String   @unique // e.g. SYS-2026-0042
+  title               String
+  summary             String
+  category            String
+  regionScope         String   @default("DISTRICT") // LOCAL, DISTRICT, STATE, NATIONAL
+  status              String   @default("CANDIDATE") // CANDIDATE, UNDER_INVESTIGATION, VERIFIED, IN_ACTION, RESOLVED, PARTIALLY_RESOLVED, UNRESOLVED
+  
+  // 7 Factor Ratings (1.0 - 10.0)
+  severity            Float    @default(5.0)
+  urgency             Float    @default(5.0)
+  scaleEstimate       Float    @default(5.0)
+  geographicSpread    Float    @default(5.0)
+  evidenceStrength    Float    @default(5.0)
+  persistenceScore    Float    @default(5.0)
+  growthRate          Float    @default(5.0)
+  
+  priorityScore       Float    @default(50.0) // 10.0 - 100.0
+  priorityExplanation String?
+  isPublic            Boolean  @default(false)
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  reportLinks          ReportSystemicIssueLink[]
+  priorityAssessments  PriorityAssessment[]
+  verificationReviews  VerificationReview[]
+  responsibilityNodes  ResponsibilityNode[]
+  responsibilityEdges  ResponsibilityEdge[]
+  institutionalResponses InstitutionalResponse[]
+  outcomeUpdates       OutcomeUpdate[]
+
+  @@index([trackingId])
+  @@index([category])
+  @@index([status])
+  @@index([priorityScore])
+  @@index([isPublic])
+}
+
+model ReportSystemicIssueLink {
+  id               String   @id @default(uuid())
+  reportId         String
+  systemicIssueId  String
+  confidenceScore  Float    @default(0.8)
+  rationale        String?
+  linkedBy         String   @default("AI_SUGGESTED") // AI_SUGGESTED, INVESTIGATOR_CONFIRMED
+  createdAt        DateTime @default(now())
+
+  report        Report        @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  systemicIssue SystemicIssue @relation(fields: [systemicIssueId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, systemicIssueId])
+  @@index([reportId])
+  @@index([systemicIssueId])
+}
+
+model PriorityAssessment {
+  id               String   @id @default(uuid())
+  systemicIssueId  String
+  weightsSnapshot  String   // JSON string of weights used
+  inputFactors     String   // JSON string of 7 factor values
+  calculatedScore  Float
+  explanation      String
+  assessedBy       String   @default("SYSTEM") // SYSTEM, INVESTIGATOR_OVERRIDE
+  createdAt        DateTime @default(now())
+
+  systemicIssue SystemicIssue @relation(fields: [systemicIssueId], references: [id], onDelete: Cascade)
+
+  @@index([systemicIssueId])
+}
+
+model AIAnalysis {
+  id                        String   @id @default(uuid())
+  targetType                String   // REPORT, SYSTEMIC_ISSUE
+  targetId                  String
+  modelVersion              String   @default("gemini-2.5-flash")
+  extractedSignals          String   // JSON string
+  clusteringSuggestions     String?  // JSON string
+  responsibilitySuggestions String?  // JSON string
+  status                    String   @default("SUCCESS") // SUCCESS, FALLBACK, ERROR
+  createdAt                 DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([status])
+}
+
+model VerificationReview {
+  id               String   @id @default(uuid())
+  systemicIssueId  String
+  reviewerId       String
+  action           String   // REQUEST_MORE_EVIDENCE, VERIFY, MARK_INSUFFICIENT, REJECT, ESCALATE
+  notes            String
+  previousStatus   String
+  newStatus        String
+  createdAt        DateTime @default(now())
+
+  systemicIssue SystemicIssue @relation(fields: [systemicIssueId], references: [id], onDelete: Cascade)
+  reviewer      User          @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([systemicIssueId])
+  @@index([reviewerId])
+}
+
+model ResponsibilityNode {
+  id               String   @id @default(uuid())
+  systemicIssueId  String
+  name             String   // e.g. Municipal Water Supply Board
+  level            String   // OPERATIONAL, SUPERVISORY, REGULATORY_POLICY, POLITICAL_MINISTERIAL, CORRECTIVE
+  jurisdiction     String
+  description      String?
+  confidenceScore  Float    @default(0.85)
+  isVerified       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  systemicIssue SystemicIssue @relation(fields: [systemicIssueId], references: [id], onDelete: Cascade)
+  outgoingEdges ResponsibilityEdge[] @relation("SourceNode")
+  incomingEdges ResponsibilityEdge[] @relation("TargetNode")
+
+  @@index([systemicIssueId])
+  @@index([level])
+}
+
+model ResponsibilityEdge {
+  id               String   @id @default(uuid())
+  systemicIssueId  String
+  sourceNodeId     String
+  targetNodeId     String
+  relationshipType String   // SUPERVISES, REGULATES, EXECUTES, CORRECTS
+  rationale        String
+  evidenceSource   String?
+  isVerified       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  systemicIssue SystemicIssue      @relation(fields: [systemicIssueId], references: [id], onDelete: Cascade)
+  sourceNode    ResponsibilityNode @relation("SourceNode", fields: [sourceNodeId], references: [id], onDelete: Cascade)
+  targetNode    ResponsibilityNode @relation("TargetNode", fields: [targetNodeId], references: [id], onDelete: Cascade)
+
+  @@index([systemicIssueId])
+  @@index([sourceNodeId])
+  @@index([targetNodeId])
+}
+
+model InstitutionalResponse {
+  id                 String   @id @default(uuid())
+  systemicIssueId    String
+  authorityName      String
+  authorityLevel     String
+  responseSummary    String
+  responseDate       DateTime
+  responseType       String   // OFFICIAL_STATEMENT, INQUIRY_ORDERED, WORK_INITIATED, ACTION_TAKEN, DISPUTED, NO_RESPONSE
+  sourceReferenceUrl String?
+  createdAt          DateTime @default(now())
+
+  systemicIssue SystemicIssue      @relation(fields: [systemicIssueId], references: [id], onDelete: Cascade)
+  commitments   ActionCommitment[]
+
+  @@index([systemicIssueId])
+}
+
+model ActionCommitment {
+  id                 String   @id @default(uuid())
+  responseId         String
+  commitmentDetails  String
+  deadlineDate       DateTime?
+  status             String   @default("PENDING") // PENDING, IN_PROGRESS, MET, MISSED, DISPUTED
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  response InstitutionalResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+
+  @@index([responseId])
+  @@index([status])
+}
+
+model OutcomeUpdate {
+  id                         String   @id @default(uuid())
+  systemicIssueId            String
+  actorId                    String
+  outcomeStatus              String   // RESOLVED, PARTIALLY_RESOLVED, UNRESOLVED, DISPUTED
+  verificationNotes          String
+  isIndependentVerification  Boolean  @default(false)
+  createdAt                  DateTime @default(now())
+
+  systemicIssue SystemicIssue @relation(fields: [systemicIssueId], references: [id], onDelete: Cascade)
+  actor         User          @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([systemicIssueId])
+}
+
+// APPEND-ONLY IMMUTABLE AUDIT LOG
+// Application logic must only INSERT into this table. No UPDATE or DELETE APIs exist.
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorId      String   // User UUID or 'SYSTEM' or 'ANONYMOUS'
+  actorRole    String   // CITIZEN, INVESTIGATOR, ADMIN, SYSTEM
+  actionType   String   // e.g. SUBMIT_REPORT, VERIFY_ISSUE, UPDATE_PRIORITY, PUBLISH_RESPONSIBILITY_MAP
+  targetEntity String   // Report, SystemicIssue, ResponsibilityGraph, etc.
+  targetId     String   // UUID or Tracking ID of affected entity
+  diffJson     String?  // JSON snapshot of change or state transition
+  ipHash       String?  // Anonymized/hashed IP for audit
+  timestamp    DateTime @default(now())
+
+  @@index([actorId])
+  @@index([actionType])
+  @@index([targetEntity, targetId])
+  @@index([timestamp])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  linkUrl   String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+}
