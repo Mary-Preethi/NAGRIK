@@ -81,26 +81,42 @@ const HISTORICAL_VOICES: QuoteItem[] = [
 
 export default function StorytellingQuoteReel() {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
+  const timerRef = React.useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    if (!isAutoPlaying) return;
-    const interval = setInterval(() => {
+  const startAutoScroll = React.useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
       setActiveIndex((prev) => (prev + 1) % HISTORICAL_VOICES.length);
     }, 4000);
-    return () => clearInterval(interval);
-  }, [isAutoPlaying]);
+  }, []);
+
+  useEffect(() => {
+    if (!isPaused) {
+      startAutoScroll();
+    } else if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isPaused, startAutoScroll]);
 
   const current = HISTORICAL_VOICES[activeIndex];
 
   const handlePrev = () => {
-    setIsAutoPlaying(false);
     setActiveIndex((prev) => (prev === 0 ? HISTORICAL_VOICES.length - 1 : prev - 1));
+    if (!isPaused) startAutoScroll();
   };
 
   const handleNext = () => {
-    setIsAutoPlaying(false);
     setActiveIndex((prev) => (prev + 1) % HISTORICAL_VOICES.length);
+    if (!isPaused) startAutoScroll();
+  };
+
+  const handleSelect = (idx: number) => {
+    setActiveIndex(idx);
+    if (!isPaused) startAutoScroll();
   };
 
   return (
@@ -111,8 +127,12 @@ export default function StorytellingQuoteReel() {
         margin: '0 auto',
         padding: '0 3.5rem',
       }}
-      onMouseEnter={() => setIsAutoPlaying(false)}
-      onMouseLeave={() => setIsAutoPlaying(true)}
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      onTouchStart={() => setIsPaused(true)}
+      onTouchEnd={() => {
+        setTimeout(() => setIsPaused(false), 2000);
+      }}
     >
       {/* Left Navigation Arrow Button */}
       <button
@@ -353,10 +373,7 @@ export default function StorytellingQuoteReel() {
         {HISTORICAL_VOICES.map((v, idx) => (
           <button
             key={v.id}
-            onClick={() => {
-              setIsAutoPlaying(false);
-              setActiveIndex(idx);
-            }}
+            onClick={() => handleSelect(idx)}
             className="carousel-dot-btn"
             style={{
               width: activeIndex === idx ? '10px' : '8px',

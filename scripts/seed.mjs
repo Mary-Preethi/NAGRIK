@@ -40,7 +40,7 @@ async function main() {
     console.error(' To provision the secure Administrator account, you must define:');
     console.error('   ADMIN_EMAIL=admin@nagrik.in');
     console.error('   ADMIN_PASSWORD=YourSecurePassword123!');
-    console.error(' in your .env file before running the seed script.');
+    console.error(' in your environment variables before running the seed script.');
     console.error('========================================================================\n');
     process.exit(1);
   }
@@ -356,19 +356,151 @@ async function main() {
     },
   });
 
-  // 4. Seed Standalone Unclustered Reports
-  await prisma.report.create({
+  // Responsibility Nodes for Issue 2
+  const node2_1 = await prisma.responsibilityNode.create({
+    data: {
+      systemicIssueId: issue2.id,
+      name: 'District Health Society & Chief Medical Officer',
+      level: 'SUPERVISORY',
+      jurisdiction: 'North-West District',
+      description: 'Statutory oversight authority responsible for annual maintenance contracts (AMC) and clinical equipment uptime.',
+      confidenceScore: 0.92,
+      isVerified: true,
+    },
+  });
+
+  const node2_2 = await prisma.responsibilityNode.create({
+    data: {
+      systemicIssueId: issue2.id,
+      name: 'Community Health Centre Administration (Sub-District Network)',
+      level: 'OPERATIONAL',
+      jurisdiction: 'Rural Block Wards 1-4',
+      description: 'Local primary diagnostic center operators and day-to-day healthcare service delivery.',
+      confidenceScore: 0.95,
+      isVerified: true,
+    },
+  });
+
+  await prisma.responsibilityEdge.create({
+    data: {
+      systemicIssueId: issue2.id,
+      sourceNodeId: node2_1.id,
+      targetNodeId: node2_2.id,
+      relationshipType: 'SUPERVISES',
+      rationale: 'District Health Society manages state diagnostic equipment maintenance contracts for local health centres.',
+      evidenceSource: 'State Health Mission Framework Guidelines',
+      isVerified: true,
+    },
+  });
+
+  const report3 = await prisma.report.create({
+    data: {
+      trackingId: 'NAG-2026-1021',
+      userId: citizen.id,
+      title: 'Ultrasonic scanner and X-Ray unit broken for 6 weeks at Rural Block CHC',
+      category: 'HEALTHCARE',
+      description:
+        'Patients are turned away and referred to private diagnostic clinics 28km away due to broken ultrasound probe and offline X-Ray machine.',
+      locationState: 'Delhi',
+      locationDistrict: 'North-West District',
+      locationGeneral: 'Block Primary Health Center',
+      status: 'LINKED_TO_SYSTEMIC',
+    },
+  });
+
+  await prisma.reportSystemicIssueLink.create({
+    data: {
+      reportId: report3.id,
+      systemicIssueId: issue2.id,
+      confidenceScore: 0.94,
+      rationale: 'Direct clinical equipment maintenance failure reported at Sub-District CHC.',
+      linkedBy: 'INVESTIGATOR_CONFIRMED',
+    },
+  });
+
+  // 4. Seed Systemic Issue 3: Candidate Review Queue for Investigator Workbench
+  const issue3 = await prisma.systemicIssue.create({
+    data: {
+      trackingId: 'SYS-2026-0035',
+      title: 'Recurrent Monsoon Waterlogging and Obstructed Storm Drains in South District Wards',
+      summary:
+        'Cluster of 8 citizen reports indicates severe inundation during moderate rainfall due to uncleaned storm drain culverts and blocked arterial outlets.',
+      category: 'CIVIC_SERVICES',
+      regionScope: 'LOCAL',
+      status: 'CANDIDATE',
+      severity: 6.8,
+      urgency: 6.5,
+      scaleEstimate: 6.0,
+      geographicSpread: 5.5,
+      evidenceStrength: 5.8,
+      persistenceScore: 6.2,
+      growthRate: 5.0,
+      priorityScore: 61.2,
+      priorityExplanation:
+        'Evaluated at 61.2/100. AI-suggested candidate cluster pending investigator verification and statutory graph publication.',
+      isPublic: false,
+    },
+  });
+
+  const node3_1 = await prisma.responsibilityNode.create({
+    data: {
+      systemicIssueId: issue3.id,
+      name: 'South Municipal Corporation (Drainage & Flood Control Division)',
+      level: 'OPERATIONAL',
+      jurisdiction: 'South District Wards 32-38',
+      description: 'Pre-monsoon desilting and arterial storm drain maintenance execution.',
+      confidenceScore: 0.85,
+      isVerified: false,
+    },
+  });
+
+  const node3_2 = await prisma.responsibilityNode.create({
+    data: {
+      systemicIssueId: issue3.id,
+      name: 'State Urban Development Department (Stormwater Oversight Cell)',
+      level: 'REGULATORY_POLICY',
+      jurisdiction: 'State Government',
+      description: 'Capital drain remodeling and urban flood mitigation policy.',
+      confidenceScore: 0.82,
+      isVerified: false,
+    },
+  });
+
+  await prisma.responsibilityEdge.create({
+    data: {
+      systemicIssueId: issue3.id,
+      sourceNodeId: node3_2.id,
+      targetNodeId: node3_1.id,
+      relationshipType: 'REGULATES',
+      rationale: 'State urban policy sets annual desilting completion mandates before monsoon season.',
+      evidenceSource: 'Urban Flood Management Directive 2025',
+      isVerified: false,
+    },
+  });
+
+  // 5. Seed Standalone Reports
+  const report4 = await prisma.report.create({
     data: {
       trackingId: 'NAG-2026-1045',
       userId: citizen.id,
-      title: 'Broken Streetlight and exposed wiring along Outer Ring Road Pedestrian Crossing',
-      category: 'ROADS_INFRASTRUCTURE',
+      title: 'Waterlogged intersection and blocked storm culverts along Outer Ring Road',
+      category: 'CIVIC_SERVICES',
       description:
-        'Streetlight pole #42 has severed insulation near ground level, presenting shock hazard during monsoon rain.',
+        'Severe 2-foot waterlogging persists for 48 hours after rain near pedestrian crossing due to clogged storm sewer drains.',
       locationState: 'Delhi',
       locationDistrict: 'South District',
       locationGeneral: 'Outer Ring Road Pillar 42',
       status: 'PRELIMINARY_ANALYSIS',
+    },
+  });
+
+  await prisma.reportSystemicIssueLink.create({
+    data: {
+      reportId: report4.id,
+      systemicIssueId: issue3.id,
+      confidenceScore: 0.88,
+      rationale: 'AI signal similarity with South District stormwater drainage disruption.',
+      linkedBy: 'AI_SUGGESTED',
     },
   });
 
