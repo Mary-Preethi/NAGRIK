@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import { createClient } from '@libsql/client';
+import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
@@ -25,7 +27,28 @@ function loadEnv() {
 
 loadEnv();
 
-const prisma = new PrismaClient();
+function createSeedPrismaClient() {
+  const tursoUrl = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL;
+  const tursoAuthToken = process.env.TURSO_AUTH_TOKEN;
+
+  if (tursoUrl && (tursoUrl.startsWith('libsql://') || tursoUrl.startsWith('https://') || tursoAuthToken)) {
+    const libsql = createClient({
+      url: tursoUrl,
+      authToken: tursoAuthToken,
+    });
+    const adapter = new PrismaLibSQL(libsql);
+    return new PrismaClient({ adapter });
+  }
+
+  const localDbPath = path.resolve(process.cwd(), 'prisma', 'dev.db');
+  const libsql = createClient({
+    url: `file:${localDbPath}`,
+  });
+  const adapter = new PrismaLibSQL(libsql);
+  return new PrismaClient({ adapter });
+}
+
+const prisma = createSeedPrismaClient();
 
 async function main() {
   console.log('Seeding NAGRIK synthetic demo dataset...');
